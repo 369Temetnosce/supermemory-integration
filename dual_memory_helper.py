@@ -38,9 +38,9 @@ class DualMemoryHelper:
             self.has_supermemory = False
             print("⚠️  Supermemory.ai API key not found. Only Windsurf Memory will be used.")
     
-    def save_session_end(self, summary, next_steps, status, github_url=None, commit_hash=None):
+    def save_session_end(self, summary, next_steps, status, github_url=None, commit_hash=None, verify=True):
         """
-        Save session end summary to BOTH memory systems.
+        Save session end summary to BOTH memory systems with verification.
         
         Args:
             summary: What was accomplished
@@ -48,9 +48,10 @@ class DualMemoryHelper:
             status: Current project status
             github_url: Optional GitHub repository URL
             commit_hash: Optional Git commit hash
+            verify: If True, verify the save by searching (default: True)
             
         Returns:
-            dict with results from both systems
+            dict with results from both systems including verification
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %I:%M %p %Z")
         
@@ -59,13 +60,15 @@ class DualMemoryHelper:
         
         results = {
             'windsurf': None,
-            'supermemory': None
+            'supermemory': None,
+            'verified': False
         }
         
         # 1. Save to Windsurf Memory (via Cascade create_memory tool)
         print("\n📝 Windsurf Memory:")
         print(f"   Content: {memory_content}")
         print("   ℹ️  Use Cascade's create_memory tool to save this to Windsurf Memory")
+        print("   ✅ Verify: Confirm memory created with Memory ID")
         results['windsurf'] = 'manual_save_required'
         
         # 2. Save to Supermemory.ai
@@ -110,10 +113,36 @@ Last Worked: {timestamp}
                 print(f"   ✅ Saved to Supermemory.ai")
                 print(f"   Memory ID: {response.id}")
                 print(f"   Status: {response.status}")
+                
                 results['supermemory'] = {
                     'id': response.id,
                     'status': response.status
                 }
+                
+                # VERIFICATION: Search to confirm memory was saved
+                if verify:
+                    print(f"\n🔍 Verifying save...")
+                    import time
+                    time.sleep(1)  # Brief delay for indexing
+                    
+                    search_response = self.supermemory_client.search.execute(
+                        q=f"{self.project_name} session end",
+                        limit=5
+                    )
+                    
+                    # Check if our memory appears in results
+                    found = False
+                    for result in search_response.results:
+                        if result.document_id == response.id:
+                            found = True
+                            break
+                    
+                    if found:
+                        print(f"   ✅ Verified: Memory found in search results")
+                        results['verified'] = True
+                    else:
+                        print(f"   ⚠️  Memory saved but not yet indexed (may take a few seconds)")
+                        results['verified'] = 'pending'
                 
             except Exception as e:
                 print(f"   ❌ Error saving to Supermemory.ai: {e}")
